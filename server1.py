@@ -1,15 +1,20 @@
+import os
 import json
 import socket
 import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
-# Global o'zgaruvchi
+# Global JSON ma'lumot
 latest_data = {"status": "no data yet"}
 data_lock = threading.Lock()
 
-# ==========================
-#   HTTP JSON server qismi
-# ==========================
+# Render tomonidan berilgan port
+PORT_HTTP = int(os.getenv("PORT", 10000))
+PORT_TCP = 9000  # TCP uchun lokal port (thread ichida)
+
+# ---------------------
+# HTTP server
+# ---------------------
 class CarTrackerHandler(BaseHTTPRequestHandler):
     def _set_headers(self, status=200):
         self.send_response(status)
@@ -26,26 +31,25 @@ class CarTrackerHandler(BaseHTTPRequestHandler):
         else:
             self.send_error(404, "Not Found")
 
-def run_http_server(port=8080):
-    server_address = ('', port)
+def run_http_server():
+    server_address = ('0.0.0.0', PORT_HTTP)
     httpd = HTTPServer(server_address, CarTrackerHandler)
-    print(f"✅ HTTP server ishga tushdi: http://0.0.0.0:{port}/data")
+    print(f"🌍 HTTP server ishlayapti: 0.0.0.0:{PORT_HTTP}")
     httpd.serve_forever()
 
-# ==========================
-#   TCP qismi (ma’lumot qabul qiladi)
-# ==========================
-def run_tcp_server(host='0.0.0.0', port=9000):
+# ---------------------
+# TCP server thread
+# ---------------------
+def run_tcp_server():
     global latest_data
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server_socket:
-        server_socket.bind((host, port))
-        server_socket.listen(5)
-        print(f"📡 TCP server ishga tushdi: {host}:{port}")
-
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(('0.0.0.0', PORT_TCP))  # 0.0.0.0 => hamma IPdan qabul qiladi
+        s.listen(5)
+        print(f"📡 TCP server ishlayapti: 0.0.0.0:{PORT_TCP}")
         while True:
-            conn, addr = server_socket.accept()
+            conn, addr = s.accept()
             with conn:
-                print(f"🟢 Yangi TCP ulanish: {addr}")
+                print(f"🟢 TCP ulanish: {addr}")
                 data = conn.recv(4096)
                 if not data:
                     continue
@@ -53,16 +57,14 @@ def run_tcp_server(host='0.0.0.0', port=9000):
                     json_data = json.loads(data.decode('utf-8'))
                     with data_lock:
                         latest_data = json_data
-                    print("📩 Ma’lumot qabul qilindi:", json_data)
                     conn.sendall(b'{"status": "received"}')
                 except json.JSONDecodeError:
-                    print("⚠️ Noto‘g‘ri JSON!")
                     conn.sendall(b'{"error": "invalid json"}')
 
-# ==========================
-#   Asosiy ishga tushirish
-# ==========================
+# ---------------------
+# Main
+# ---------------------
 if __name__ == "__main__":
-    http_thread = threading.Thread(target=run_http_server, daemon=True)
-    http_thread.start()
-    run_tcp_server()
+    tcp_thread = threading.Thread(target=run_tcp_server, daemon=True)
+    tcp_thread.start()
+    run_http_server()
