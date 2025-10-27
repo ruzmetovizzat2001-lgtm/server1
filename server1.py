@@ -2,14 +2,13 @@ import json
 import socket
 import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
-import ssl
 
 # Global o'zgaruvchi
 latest_data = {"status": "no data yet"}
 data_lock = threading.Lock()
 
 # ==========================
-#   HTTPS JSON server qismi
+#   HTTP JSON server qismi
 # ==========================
 class CarTrackerHandler(BaseHTTPRequestHandler):
     def _set_headers(self, status=200):
@@ -27,21 +26,10 @@ class CarTrackerHandler(BaseHTTPRequestHandler):
         else:
             self.send_error(404, "Not Found")
 
-def run_https_server(port=8443):
+def run_http_server(port=8080):
     server_address = ('', port)
     httpd = HTTPServer(server_address, CarTrackerHandler)
-
-    # SSL (sertifikat kerak)
-    # Sertifikatlarni quyidagicha yarating:
-    # openssl req -new -x509 -keyout server.pem -out server.pem -days 365 -nodes
-    httpd.socket = ssl.wrap_socket(
-        httpd.socket,
-        server_side=True,
-        certfile="server.pem",
-        ssl_version=ssl.PROTOCOL_TLS
-    )
-
-    print(f"✅ HTTPS server ishga tushdi: https://localhost:{port}/data")
+    print(f"✅ HTTP server ishga tushdi: http://0.0.0.0:{port}/data")
     httpd.serve_forever()
 
 # ==========================
@@ -75,9 +63,6 @@ def run_tcp_server(host='0.0.0.0', port=9000):
 #   Asosiy ishga tushirish
 # ==========================
 if __name__ == "__main__":
-    # HTTPS serverni alohida threadda ishlatamiz
-    https_thread = threading.Thread(target=run_https_server, daemon=True)
-    https_thread.start()
-
-    # TCP serverni ishga tushiramiz
+    http_thread = threading.Thread(target=run_http_server, daemon=True)
+    http_thread.start()
     run_tcp_server()
